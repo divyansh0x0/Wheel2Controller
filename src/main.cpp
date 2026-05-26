@@ -1,34 +1,51 @@
-// 1. The Delay function stays outside
-void delay(int count) {
-    for (volatile int i = 0; i < count; i++) {
-        // Do nothing
-    }
+#include "drivers/MemoryMap.h"
+#include "drivers/TB6612FNG.h"
+
+#define DEBUG
+// Define our global motor controller
+// Left: IN1=PA2, IN2=PA3, PWMA=PA1 (TIM2 CH2)
+// Right: IN1=PA5, IN2=PA6, PWMB=PA7 (TIM3 CH2)
+// STBY: PA4
+
+
+// Simple loop delay (approx 0.02s / 50Hz)
+void delay(unsigned int count) {
+    for (volatile unsigned int i = 0; i < count; i++) {}
 }
 
-int main() {
-    // 2. MOVE THESE INSIDE MAIN!
-    // Now they are initialized safely on the stack as local variables.
-    volatile unsigned int* RCC_APB2ENR = (volatile unsigned int*)(0x40021000u + 0x18u);
-    volatile unsigned int* GPIOC_CRH   = (volatile unsigned int*)(0x40011004u);
-    volatile unsigned int* GPIOC_ODR   = (volatile unsigned int*)(0x4001100Cu);
+[[noreturn]] int main() {
+    // 1. Enable Clocks (The "Holy Trinity")
+    W2::RCC1->enableClock(W2::APB2Peripheral::GPIOA);
+    W2::RCC1->enableClock(W2::APB1Peripheral::TIM2);
+    W2::RCC1->enableClock(W2::APB1Peripheral::TIM3);
 
-    // 3. Turn on the clock for Port C (Bit 4)
-    *RCC_APB2ENR |= (1 << 4);
+    // 2. Configure Timer Frequencies (72MHz / 72 = 1MHz, ARR=1000 -> 1kHz PWM)
+    W2::TIMER2->setFrequency(72, 1000);
+    W2::TIMER3->setFrequency(72, 1000);
 
-    // 4. Configure Pin 13 as Output Push-Pull (Bits 20-23)
-    *GPIOC_CRH &= ~(15 << 20); // Clear the 4 bits for Pin 13
-    *GPIOC_CRH |=  (3 << 20);  // Set to '0011' (Output 50MHz)
+    // 3. Configure PWM pins to Alternate Function mode
+    // These must be set to AF Push-Pull so the Timers can override the GPIO output
+    W2::GPIOA->setPinMode(1, W2::GPIOMode::FastAlternatePushPull); // PWMA
+    W2::GPIOA->setPinMode(7, W2::GPIOMode::FastAlternatePushPull); // PWMB
 
-    // 5. The Infinite Loop
-    while(1) {
-        // Pull PC13 LOW (0) -> LED ON
-        *GPIOC_ODR &= ~(1 << 13);
-        delay(500000);
-
-        // Push PC13 HIGH (1) -> LED OFF
-        *GPIOC_ODR |= (1 << 13);
-        delay(500000);
+    // 5. Start the Timers
+    W2::TIMER2->start();
+    W2::TIMER3->start();
+    W2::TB6612FNG robotBase(
+        W2::GPIOA, 2, 3, W2::TIMER2, W2::TimerChannel::Channel2,
+        W2::GPIOA, 5, 6, W2::TIMER3, W2::TimerChannel::Channel2,
+        W2::GPIOA, 4
+    );
+    // 6. Main Control Loop
+    int i = 0;
+    while (true) {
+        // Example: drive at half speed forward (500/1000 = 50%)
+        // Joystick inputs should be mapped to the range [-1000, 1000]
+        robotBase.update(0, 500 - i);
+        if (i >= 500) {
+            i = 0;
+        }
+        delay(100000); // 50Hz control loop timing
+        i++;
     }
-
-    return 0;
 }

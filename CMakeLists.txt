@@ -18,27 +18,63 @@ project(Wheel2Firmware CXX C ASM)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 4. CPU-SPECIFIC FLAGS — these MUST be passed to the compiler so it generates
-#    Thumb-2 instructions. Without them the compiler emits ARM-mode code,
-#    which immediately HardFaults on the Cortex-M3 (a Thumb-only core).
+# -----------------------------------------------------------------------------
+# 4. COMPILER FLAGS (Separated by Build Type)
+# -----------------------------------------------------------------------------
+
+# Common Flags (Always active: Architecture, Strict Warnings, C++ stripping)
 set(CPU_FLAGS "-mcpu=cortex-m3 -mthumb")
+set(WARNING_FLAGS "-Wall -Wextra -Wdouble-promotion -Wfloat-conversion -Werror=double-promotion")
+set(CXX_ONLY_FLAGS "-fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CPU_FLAGS} -O0 -g3 -Wall -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CPU_FLAGS} -O0 -g3 -Wall")
+# Apply Common Flags
+set(CMAKE_CXX_FLAGS "${CPU_FLAGS} ${WARNING_FLAGS} ${CXX_ONLY_FLAGS}")
+set(CMAKE_C_FLAGS "${CPU_FLAGS} ${WARNING_FLAGS}")
 
+# --- DEBUG BUILD FLAGS ---
+# -Og: Optimizes specifically for debugging (keeps variables readable in GDB).
+# -g3: Maximum debug symbols, including preprocessor macros.
+# -DDEBUG: Sets a global #define DEBUG macro you can use in your code.
+set(CMAKE_CXX_FLAGS_DEBUG "-Og -g3 -DDEBUG")
+set(CMAKE_C_FLAGS_DEBUG "-Og -g3 -DDEBUG")
+
+# --- RELEASE BUILD FLAGS ---
+# -O3: Maximum speed optimization (aggressively collapses inline functions).
+# -DNDEBUG: Standard C++ macro that automatically strips out any assert() checks.
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
+
+# Default to Debug if the user doesn't specify a type
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug CACHE STRING "Choose the type of build." FORCE)
+    message(STATUS "No build type selected, defaulting to Debug")
+endif()
+
+# -----------------------------------------------------------------------------
+# 5. DEFINE SOURCES
+# -----------------------------------------------------------------------------
 include_directories(include)
-add_executable(Wheel2Firmware startup.cpp src/main.cpp
-        include/drivers/TB6612FNG.h
-        include/drivers/MemoryMap.h)
 
-# 5. LINKER FLAGS
+add_executable(Wheel2Firmware
+        startup.cpp
+        src/main.cpp
+        src/drivers/TB6612FNG.cpp
+)
+
+# -----------------------------------------------------------------------------
+# 6. LINKER FLAGS (The Linker Diet)
+# -----------------------------------------------------------------------------
 target_link_options(Wheel2Firmware PRIVATE
         -T${CMAKE_SOURCE_DIR}/linker.ld
         -nostartfiles
+        --specs=nano.specs
         --specs=nosys.specs
         -mcpu=cortex-m3
         -mthumb
+        -Wl,--gc-sections
 )
+
+# 7. GENERATE THE RAW BINARY
 add_custom_command(TARGET Wheel2Firmware POST_BUILD
         COMMAND arm-none-eabi-objcopy -O binary $<TARGET_FILE:Wheel2Firmware> ${CMAKE_CURRENT_BINARY_DIR}/Wheel2Firmware.bin
 )
