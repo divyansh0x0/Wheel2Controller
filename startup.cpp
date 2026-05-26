@@ -12,34 +12,49 @@
  * Reference:
  * https://developer.arm.com/documentation/dui0552/a/the-cortex-m3-processor/exception-model/vector-table
  */
-//type for constructors of c++ objects
+/**
+ * @brief Function pointer type for C++ static constructor initializers.
+ */
 using init_func_t = void (*)();
-// Interrupt service routine vector (ISRV) length
+
+/**
+ * @brief Total length of the Interrupt Service Routine Vector (ISRV) table.
+ */
 constexpr unsigned int ISRV_LENGTH = 48;
 
-// Interrupt service routine vector stores function pointers which point to functions which return void and take void arguments
+/**
+ * @brief Function pointer type for Interrupt Service Routines (ISRs).
+ */
 using isr_t = void (*)();
-// Trick C++ into thinking this memory address is a function so we can avoid casting it!
+
+/**
+ * @brief Initial Stack Pointer address defined by the linker script.
+ */
 extern "C" void _estack(void);
 
 extern "C" unsigned int
-        _sidata, // Store the uint at source address of .data in Flash
-        _sdata, // stores the uint at start address in SRAM
-        _edata,// stores the uint Destination end address in SRAM
-        _sbss, // start of block started by symbol (bss)
-        _ebss; // end of block started by symbol (bss)
+        _sidata, ///< Start address of the initialization values for the .data section in Flash.
+        _sdata,  ///< Start address of the .data section in SRAM.
+        _edata,  ///< End address of the .data section in SRAM.
+        _sbss,   ///< Start address of the .bss section in SRAM.
+        _ebss;   ///< End address of the .bss section in SRAM.
 
 extern int main(void);
 
-extern "C" init_func_t _sinit; //  first c++ initializer functions
-extern "C" init_func_t _einit; // last c++ initializer function
+extern "C" init_func_t _sinit; ///< Start address of the static constructor initializer list.
+extern "C" init_func_t _einit; ///< End address of the static constructor initializer list.
 
+/**
+ * @brief Reset handler called on processor reset.
+ * @details Initializes the data segment in SRAM from Flash, clears the BSS segment,
+ * executes static constructor initialization functions, and invokes the main program.
+ */
 extern "C" [[noreturn]] void Reset_Handler(void) {
     unsigned int* src = &_sidata;
     unsigned int* dst = &_sdata;
     while (dst < &_edata) {
-        *dst= *src;  //then write src in dst
-        // increment src and increment dst pointers to next location
+        *dst= *src;  // Copy initialization values from Flash to SRAM
+        // Increment pointers to process subsequent words
         src++;
         dst++;
     }
@@ -50,7 +65,7 @@ extern "C" [[noreturn]] void Reset_Handler(void) {
         src++;
     }
 
-    init_func_t* src_func = &_sinit; // pointer to the first initializer function
+    init_func_t* src_func = &_sinit; // Pointer to the static constructor initializer list
     while (src_func < &_einit) {
         (*src_func)();
         src_func++;
@@ -60,18 +75,23 @@ extern "C" [[noreturn]] void Reset_Handler(void) {
 }
 
 
-// A generic catch-all for any interrupt we haven't written a specific handler for
+/**
+ * @brief Default handler for unhandled exceptions and interrupts.
+ * @details Provides an infinite loop fallback to halt execution for inspection.
+ */
 extern "C" void Default_Handler(void) {
     while (1) {
-        // Spin infinitely so we can catch it with a debugger
+        // Halt execution to allow debugger attachment
     }
 }
 
-// The specific handler for fatal system crashes
+/**
+ * @brief Hard fault exception handler.
+ * @details Entered upon hardware execution errors such as bus, memory access, or usage faults.
+ */
 extern "C" void HardFault_Handler(void) {
     while (1) {
-        // If we end up here, our code did something highly illegal (like dereferencing a bad pointer).
-        // Spin infinitely so GDB can inspect the scene of the crime.
+        // Halt execution to preserve CPU register state for GDB inspection
     }
 }
 __attribute__((section(".isr_vector"), used))
@@ -92,8 +112,8 @@ isr_t isr_vector_table[ISRV_LENGTH] = {
     nullptr,             // 13: Reserved
     Default_Handler,     // 14: PendSV
     Default_Handler,     // 15: SysTick
-    // IRQ 0-31 — STM32F103 device-specific interrupts
-    // All default to Default_Handler so unhandled IRQs spin safely
+    // Device-specific interrupts (Interrupt Requests 0 to 31)
+    // Configured to Default_Handler for fallback handling of unhandled interrupts.
     Default_Handler,     // 16: WWDG
     Default_Handler,     // 17: PVD
     Default_Handler,     // 18: TAMPER

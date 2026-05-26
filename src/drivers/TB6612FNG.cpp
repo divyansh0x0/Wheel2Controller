@@ -24,7 +24,7 @@ namespace W2 {
         m_stdby_port = stdby_port;
         m_stdby_pin = stdby_pin;
 
-        // Note: correction defaults to 1000 (1.0x)
+        // Calibration correction factor defaults to 1000 (representing 1.0).
         m_left_motor_status  = {MotorDirection::STOP, 0, 1000};
         m_right_motor_status = {MotorDirection::STOP, 0, 1000};
 
@@ -58,7 +58,7 @@ namespace W2 {
                 break;
         }
 
-        // Apply fixed-point correction (e.g., speed * 1000 / 1000)
+        // Apply fixed-point scaling factor: final_speed = (correction * speed) / 1000
         unsigned int final_speed = (status.correction * status.speed) / 1000;
         pins.pwm_timer->setDutyCycle(pins.channel, final_speed);
     }
@@ -96,7 +96,7 @@ namespace W2 {
     }
 
     void TB6612FNG::update(int x, int y) {
-        // assume x,y ∈ [-1000, 1000]
+        // Steering parameter x and throttle parameter y must satisfy x,y ∈ [-1000, 1000]
         x = clamp(x, -MAX_PWM, MAX_PWM);
         y = clamp(y, -MAX_PWM, MAX_PWM);
 
@@ -106,14 +106,14 @@ namespace W2 {
         int abs_x = abs(x);
         int abs_y = abs(y);
 
-        // ===== ARC MODE =====
+        // --- Arc Steering Mode Calculation ---
         int mag = abs_y;
 
         int denominator = abs_x + abs_y;
-        int t = 0; // scaled 0 to 1000
+        int t = 0; // Normalized ratio scaled from 0 to 1000
 
         if (denominator > 0) {
-            // Multiply before dividing to retain precision!
+            // Multiply before division to maintain integer precision
             t = (abs_x * 1000) / denominator;
         }
 
@@ -132,26 +132,26 @@ namespace W2 {
         vL_arc *= dir;
         vR_arc *= dir;
 
-        // ===== TANK MODE =====
+        // --- Tank Steering Mode Calculation ---
         vL_tank = x;
         vR_tank = -x;
 
-        // ===== BLENDING =====
+        // --- Blending Calculation (Arc and Tank Modes) ---
         int alpha = clamp(abs_y * 2, 0, 1000);
 
-        // Fixed-point blending math
+        // Blending interpolation using fixed-point arithmetic
         int vL_target = (alpha * vL_arc + (1000 - alpha) * vL_tank) / 1000;
         int vR_target = (alpha * vR_arc + (1000 - alpha) * vR_tank) / 1000;
 
         vLeft_cur = vL_target;
         vRight_cur = vR_target;
 
-        // ===== PWM OUTPUT =====
-        // Since input was already 1000-based, our targets are naturally scaled to MAX_PWM.
-        // We preserve your original cross-assignment (left gets right, right gets left).
+        // --- Duty Cycle Output Configuration ---
+        // Inputs map to the MAX_PWM limit corresponding to the timer Auto-Reload Register (ARR) value.
+        // Map left target output to right motor driver channel, and right target output to left motor driver channel.
         setLeftMotor(abs(vRight_cur), getDirection(vRight_cur));
         setRightMotor(abs(vLeft_cur), getDirection(vLeft_cur));
 
-        update(); // Push to silicon
+        update(); // Apply configuration parameters to the timer registers and GPIO outputs.
     }
 }
