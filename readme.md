@@ -29,3 +29,20 @@ When a pin is an input, it is just listening to the voltage on the wire.
 Normally, your C++ code turns pins ON and OFF by writing 1s and 0s to an Output Data Register (ODR). But sometimes, your code isn't fast enough.
    - Alternate Function Push-Pull: The pin acts as a Push-Pull output, but your C++ code no longer controls it. Instead, an internal hardware peripheral (like a hardware Timer) takes over the pin. (You will use this to generate high-speed PWM signals for your motors).
    - Alternate Function Open-Drain: The pin acts as an Open-Drain output, but a hardware peripheral controls it. (You will use this for the I2C bus to talk to your MPU6050 Gyroscope, because I2C requires open-drain circuits so multiple devices can share the same wire without short-circuiting).
+
+## Sequence to wake up hardware
+Clock → Pins → Peripheral:
+The Clock (RCC): The Timer is dead until you give it power. You must find the RCC register that turns on TIM2.
+The Pins (GPIO / AFIO): You must configure a physical pin (like PA0) to step aside and let the Timer control its voltage. (This is called an "Alternate Function").
+The Peripheral (TIM): Finally, you set the Timer's speed, period, and turn it on.
+
+
+## PINS USED
+I have stm32f103c8t6
+
+1. A1 to A7 pins for TB6612FNG motor driver
+2. B10 B11 as SDA SCL with MPU
+3. B4 B5 B6 B7 for quadrature encoder
+4. A9 A10 for RX TX with esp8266
+
+Can i control 2 DRVs from it as well?
