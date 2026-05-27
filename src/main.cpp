@@ -24,8 +24,8 @@ void delay(unsigned int count) {
     W2::RCC1->enableClock(W2::APB1Peripheral::TIM3);
 
     // 2. Configure Timer Frequencies (72 MHz internal clock divided by 72 = 1 MHz timebase, ARR=1000 yields 1 kHz PWM frequency)
-    W2::TIMER2->setFrequency(72, 1000);
-    W2::TIMER3->setFrequency(72, 1000);
+    W2::TIMER2->setFrequency(1000, 72);
+    W2::TIMER3->setFrequency(1000, 72);
 
     // 3. Configure peripheral GPIO pins
     // Set timer output channels and USART1 TX to Alternate Function Push-Pull mode
@@ -48,11 +48,8 @@ void delay(unsigned int count) {
     while (true) {
         // Drive forward decrementing duty cycle from 50%
         // Steering and throttle inputs mapped within range [-1000, 1000]
-        robotBase.update(0, 500 - i);
-        if (i >= 500) {
-            i = 0;
-        }
-        delay(100000); // 50 Hz control loop timing loop delay
+        robotBase.update(0, 500);
+        // delay(100000); // 50 Hz control loop timing loop delay
         i++;
     }
 }

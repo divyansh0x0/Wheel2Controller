@@ -278,10 +278,10 @@ namespace W2 {
 
             // 2. Write configuration bits to CRL or CRH register
             if (pin < 8) {
-                this->CRL &= ~(0b1111 << shift); // Clear target configuration bits
+                this->CRL &= ~(0b1111u << shift); // Clear target configuration bits
                 this->CRL |= (mode_bits << shift); // Set new configuration bits
             } else if (pin < 16) {
-                this->CRH &= ~(0b1111 << shift);
+                this->CRH &= ~(0b1111u << shift);
                 this->CRH |= (mode_bits << shift);
             }
 
