@@ -45,11 +45,40 @@ extern "C" init_func_t _sinit; ///< Start address of the static constructor init
 extern "C" init_func_t _einit; ///< End address of the static constructor initializer list.
 
 /**
+ * @brief Configure system clock to 72 MHz using the external 8 MHz HSE crystal.
+ */
+static void initSystemClock() {
+    volatile auto* const FLASH_ACR = reinterpret_cast<volatile unsigned int*>(0x40022000u);
+    volatile auto* const RCC_CR    = reinterpret_cast<volatile unsigned int*>(0x40021000u);
+    volatile auto* const RCC_CFGR  = reinterpret_cast<volatile unsigned int*>(0x40021004u);
+
+    // 1. Flash: 2 wait states + prefetch buffer enable
+    *FLASH_ACR = (1u << 4u) | 2u;
+
+    // 2. Enable HSE
+    *RCC_CR |= (1u << 16u);
+    while (!(*RCC_CR & (1u << 17u))) {}
+
+    // 3. Configure PLL and bus prescalers (PLLMUL = x9, PLLSRC = HSE, PPRE1 = /2)
+    *RCC_CFGR = (0b0111u << 18u) | (1u << 16u) | (0b100u << 8u);
+
+    // 4. Enable PLL
+    *RCC_CR |= (1u << 24u);
+    while (!(*RCC_CR & (1u << 25u))) {}
+
+    // 5. Select PLL as system clock source
+    *RCC_CFGR |= 0b10u;
+    while ((*RCC_CFGR & (0b11u << 2u)) != (0b10u << 2u)) {}
+}
+
+/**
  * @brief Reset handler called on processor reset.
  * @details Initializes the data segment in SRAM from Flash, clears the BSS segment,
  * executes static constructor initialization functions, and invokes the main program.
  */
 extern "C" [[noreturn]] void Reset_Handler(void) {
+    initSystemClock();
+
     unsigned int* src = &_sidata;
     unsigned int* dst = &_sdata;
     while (dst < &_edata) {

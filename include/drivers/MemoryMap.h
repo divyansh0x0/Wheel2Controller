@@ -130,6 +130,7 @@ namespace W2 {
             this->ARR = auto_reload - 1; // ARR register is 0-indexed
             constexpr unsigned int ARE_bit_number = 7;
             this->CR1 |= (1 << ARE_bit_number); // Enable Auto-Reload Preload (ARPE) in TIMx_CR1
+            this->EGR = 1; // Generate update event to load PSC and ARR shadow registers immediately
         }
 
         /**

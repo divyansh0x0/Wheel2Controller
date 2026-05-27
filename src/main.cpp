@@ -18,10 +18,17 @@ void delay(unsigned int count) {
 
 [[noreturn]] int main() {
     // 1. Enable peripheral clocks via Reset and Clock Control (RCC) registers
+    W2::RCC1->enableClock(W2::APB2Peripheral::AlternateFunctionIO);
     W2::RCC1->enableClock(W2::APB2Peripheral::USART1);
     W2::RCC1->enableClock(W2::APB2Peripheral::GPIOA);
     W2::RCC1->enableClock(W2::APB1Peripheral::TIM2);
     W2::RCC1->enableClock(W2::APB1Peripheral::TIM3);
+
+    // Read back RCC enable registers to ensure clock stabilization before accessing registers
+    volatile unsigned int rcc_apb2 = W2::RCC1->APB2ENR;
+    volatile unsigned int rcc_apb1 = W2::RCC1->APB1ENR;
+    (void)rcc_apb2;
+    (void)rcc_apb1;
 
     // 2. Configure Timer Frequencies (72 MHz internal clock divided by 72 = 1 MHz timebase, ARR=1000 yields 1 kHz PWM frequency)
     W2::TIMER2->setFrequency(1000, 72);
@@ -35,21 +42,24 @@ void delay(unsigned int count) {
     W2::GPIOA->setPinMode(10, W2::GPIOMode::FloatingInput); // USART1 RX (Floating Input mode)
     // W2::USART1->init(); // Legacy parameterless init call
     W2::USART1->init(W2::BaudRate::Baud115200, 72000000);
-    // 5. Enable the timer counters to start generating PWM signals
-    W2::TIMER2->start();
-    W2::TIMER3->start();
+
+    // 4. Construct motor driver instance (sets direction and standby pins)
     W2::TB6612FNG robotBase(
         W2::GPIOA, 2, 3, W2::TIMER2, W2::TimerChannel::Channel2,
-        W2::GPIOA, 5, 6, W2::TIMER3, W2::TimerChannel::Channel2,
+        W2::GPIOA, 6, 5, W2::TIMER3, W2::TimerChannel::Channel2,
         W2::GPIOA, 4
     );
+
+    // 5. Enable the timer counters to start generating PWM signals (after configuration is complete)
+    W2::TIMER2->start();
+    W2::TIMER3->start();
+
     // 6. Main application control loop
     int i = 0;
     while (true) {
         // Drive forward decrementing duty cycle from 50%
         // Steering and throttle inputs mapped within range [-1000, 1000]
         robotBase.update(0, 500);
-        // delay(100000); // 50 Hz control loop timing loop delay
         i++;
     }
 }
