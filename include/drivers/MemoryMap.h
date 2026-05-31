@@ -125,12 +125,18 @@ namespace W2 {
          * @param prescaler Clock division factor (value written to PSC is prescaler - 1).
          * @param auto_reload Period count limit value (value written to ARR is auto_reload - 1).
          */
-        void setFrequency(unsigned int auto_reload, unsigned int prescaler = 1) {
-            this->PSC = prescaler - 1; // PSC register is 0-indexed
-            this->ARR = auto_reload - 1; // ARR register is 0-indexed
-            constexpr unsigned int ARE_bit_number = 7;
-            this->CR1 |= (1 << ARE_bit_number); // Enable Auto-Reload Preload (ARPE) in TIMx_CR1
-            this->EGR = 1; // Generate update event to load PSC and ARR shadow registers immediately
+        // Target frequency in Hz, and your desired max value for 100% duty cycle
+        void setFrequency(uint32_t target_hz, uint32_t resolution = 1000) {
+            uint32_t system_clock = 72000000; // 72 MHz
+
+            // Formula: PSC = SystemClock / (Frequency * ARR)
+            // We subtract 1 because hardware registers are 0-indexed
+            uint32_t psc_value = (system_clock / (target_hz * resolution)) - 1;
+            uint32_t arr_value = resolution - 1;
+
+            // Write to my actual hardware registers
+            this->PSC = psc_value;
+            this->ARR = arr_value;
         }
 
         /**

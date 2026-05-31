@@ -6,7 +6,7 @@
 // Left Motor pins configuration: IN1=PA2, IN2=PA3, PWMA=PA1 (TIM2 Channel 2)
 // Right Motor pins configuration: IN1=PA5, IN2=PA6, PWMB=PA7 (TIM3 Channel 2)
 // Standby control pin configuration: STBY=PA4
-
+#define ARR 1000
 
 /**
  * @brief Soft delay loop for timing control.
@@ -31,8 +31,8 @@ void delay(unsigned int count) {
     (void)rcc_apb1;
 
     // 2. Configure Timer Frequencies (72 MHz internal clock divided by 72 = 1 MHz timebase, ARR=1000 yields 1 kHz PWM frequency)
-    W2::TIMER2->setFrequency(1000, 72);
-    W2::TIMER3->setFrequency(1000, 72);
+    W2::TIMER2->setFrequency(20000, ARR);
+    W2::TIMER3->setFrequency(20000, ARR);
 
     // 3. Configure peripheral GPIO pins
     // Set timer output channels and USART1 TX to Alternate Function Push-Pull mode

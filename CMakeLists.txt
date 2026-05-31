@@ -58,7 +58,6 @@ include_directories(include)
 add_executable(Wheel2Firmware
         startup.cpp
         src/main.cpp
-        src/drivers/TB6612FNG.cpp
         include/drivers/USART.h
 )
 
