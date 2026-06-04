@@ -12,6 +12,7 @@
 
 namespace STM32::MemoryMap {
     inline constexpr unsigned int CPU_FREQUENCY = 72'000'000;
+    using register_t = unsigned int;
 
     /**
      * @brief Determines the internal pull-up/pull-down resistor connection for an input pin.
@@ -65,7 +66,13 @@ namespace STM32::MemoryMap {
         Channel4 = 4
     };
 
-    using register_t = unsigned int;
+    inline void waitForBit(volatile register_t *reg, const unsigned int bit, const bool state) {
+        if (state) {
+            while (!(*reg & (1u << bit))) {}
+        } else {
+            while (*reg & (1u << bit)) {}
+        }
+    }
 
     /**
      * @brief General-purpose timer peripheral register map.
@@ -192,11 +199,111 @@ namespace STM32::MemoryMap {
         volatile register_t APB1ENR; ///< 0x1C APB1 Peripheral Clock Enable Register (RCC_APB1ENR).
         volatile register_t BDCR; ///< 0x20 Backup Domain Control Register (RCC_BDCR).
         volatile register_t CSR; ///< 0x24 Control/Status Register (RCC_CSR).
+        enum class ClockOutput {
+            None = 0b0000,
+            System = 0b0100,
+            HSI = 0b0101,
+            HSE = 0b0110,
+            PLL = 0b0111,
+            PLL2 = 0b1000,
+            PLL3 = 0b1001,
+        };
+
+        enum class PLLMultiplier {
+            Times4 = 2,
+            Times5 = 3,
+            Times6 = 4,
+            Times7 = 5,
+            Times8 = 6,
+            Times9 = 7,
+            Times6half = 0b1101
+        };
+
+        enum class Prescaler {
+            None = 0b000,
+            Half = 0b100,
+            Quarter = 0b101,
+            Eighth = 0b110,
+            Sixteenth = 0b111,
+        };
+
+        enum class PLLSource {
+            HSI_Half = 0,
+            HSE = 1
+        };
+
+        enum class SystemClockSource {
+            HSI = 0b00,
+            HSE = 0b01,
+            PLL = 0b10
+        };
+
+        void enableHSI() {
+            constexpr unsigned int hsi_on_bit = 0;
+            constexpr unsigned int hsi_ready_bit = 1;
+            this->CR |= (1 << hsi_on_bit);
+            waitForBit(&this->CR, hsi_ready_bit, true);
+        }
+
+        void enableHSE() {
+            constexpr unsigned int hse_on_bit = 16;
+            constexpr unsigned int hse_ready_bit = 17;
+            this->CR |= (1 << hse_on_bit);
+            waitForBit(&this->CR, hse_ready_bit, true);
+        }
+
+        void enablePLL(PLLSource source, PLLMultiplier multiplier) {
+            constexpr unsigned int pll_on_bit = 24;
+            constexpr unsigned int pll_ready_bit = 25;
+
+            // PLL must be disabled to change its source/multiplier
+            this->CR &= ~(1 << pll_on_bit);
+
+            // Configure PLL input source (PLLSRC bit 16 in RCC_CFGR)
+            constexpr unsigned int pll_src_bit = 16;
+            if (source == PLLSource::HSE) {
+                this->CFGR |= (1 << pll_src_bit);
+            } else {
+                this->CFGR &= ~(1 << pll_src_bit);
+            }
+
+            // Configure PLL multiplication factor (PLLMUL bits 21:18 in RCC_CFGR)
+            constexpr unsigned int pll_mul_offset = 18;
+            this->CFGR &= ~(0b1111 << pll_mul_offset); // Clear all 4 bits
+            this->CFGR |= static_cast<unsigned int>(multiplier) << pll_mul_offset;
+
+            // Enable PLL
+            this->CR |= (1 << pll_on_bit);
+            waitForBit(&this->CR, pll_ready_bit, true);
+        }
+
+        void setSYSCLKSource(SystemClockSource source) {
+            const unsigned int sw_val = static_cast<unsigned int>(source);
+            
+            // Set SW bits (bits 1:0 of RCC_CFGR)
+            this->CFGR = (this->CFGR & ~0b11) | sw_val;
+
+            // Wait for SWS bits (bits 3:2 of RCC_CFGR) to indicate the selected source
+            while (((this->CFGR >> 2) & 0b11) != sw_val) {}
+        }
+
+        void setAPB1PreScaler(Prescaler scale) {
+            constexpr unsigned int ppre_bit = 8;
+            this->CFGR &= ~(0b111 << ppre_bit); //reset
+            this->CFGR |= static_cast<unsigned int>(scale) << ppre_bit; //set
+        }
+
+        void setAPB2PreScaler(Prescaler scale) {
+            constexpr unsigned int ppre_bit = 11;
+            this->CFGR &= ~(0b111 << ppre_bit); //reset
+            this->CFGR |= static_cast<unsigned int>(scale) << ppre_bit; //set
+        }
+
         /**
          * @brief Enables the clock for a peripheral on the APB2 bus.
          * @param peripheral The target APB2 peripheral bit offset value.
          */
-        void enableClock(APB2Peripheral peripheral) {
+        void enablePeripheral(APB2Peripheral peripheral) {
             this->APB2ENR |= (1 << static_cast<unsigned int>(peripheral));
         }
 
@@ -204,7 +311,7 @@ namespace STM32::MemoryMap {
          * @brief Enables the clock for a peripheral on the APB1 bus.
          * @param peripheral The target APB1 peripheral bit offset value.
          */
-        void enableClock(APB1Peripheral peripheral) {
+        void enablePeripheral(APB1Peripheral peripheral) {
             this->APB1ENR |= (1 << static_cast<unsigned int>(peripheral));
         }
     };
@@ -223,32 +330,44 @@ namespace STM32::MemoryMap {
         volatile register_t BSRR; ///< 0x10 Port Bit Set/Reset Register (GPIOx_BSRR).
         volatile register_t BRR; ///< 0x14 Port Bit Reset Register (GPIOx_BRR).
         volatile register_t LCKR; ///< 0x18 Port Configuration Lock Register (GPIOx_LCKR).
-    /**
-     * @brief Defines the 4-bit configuration for the GPIO MODE and CNF register bitfields.
-     * @details Mapped to the CNF[1:0] and MODE[1:0] bitfields in the GPIOx_CRL and GPIOx_CRH registers.
-     */
-    enum class Mode: unsigned int {
-        /* Input Modes */
-        AnalogInput = 0b0000, ///< Analog input configuration (CNF=00, MODE=00).
-        FloatingInput = 0b0100, ///< Floating input configuration (CNF=01, MODE=00).
-        PullUpPullDown = 0b1000, ///< Input with pull-up / pull-down configuration (CNF=10, MODE=00).
+        /**
+         * @brief Defines the 4-bit configuration for the GPIO MODE and CNF register bitfields.
+         * @details Mapped to the CNF[1:0] and MODE[1:0] bitfields in the GPIOx_CRL and GPIOx_CRH registers.
+         */
+        enum class Mode: unsigned int {
+            /* Input Modes */
+            AnalogInput = 0b0000, ///< Analog input configuration (CNF=00, MODE=00).
+            FloatingInput = 0b0100, ///< Floating input configuration (CNF=01, MODE=00).
+            PullUpPullDown = 0b1000, ///< Input with pull-up / pull-down configuration (CNF=10, MODE=00).
 
-        /* Output Modes */
-        SlowGeneralPurposePushPull = 0b0010, ///< General purpose output push-pull, max speed 2 MHz (CNF=00, MODE=10).
-        SlowGeneralPurposeOpenDrain = 0b0110, ///< General purpose output open-drain, max speed 2 MHz (CNF=01, MODE=10).
-        SlowAlternatePushPull = 0b1010, ///< Alternate function output push-pull, max speed 2 MHz (CNF=10, MODE=10).
-        SlowAlternateOpenDrain = 0b1110, ///< Alternate function output open-drain, max speed 2 MHz (CNF=11, MODE=10).
+            /* Output Modes */
+            SlowGeneralPurposePushPull = 0b0010,
+            ///< General purpose output push-pull, max speed 2 MHz (CNF=00, MODE=10).
+            SlowGeneralPurposeOpenDrain = 0b0110,
+            ///< General purpose output open-drain, max speed 2 MHz (CNF=01, MODE=10).
+            SlowAlternatePushPull = 0b1010, ///< Alternate function output push-pull, max speed 2 MHz (CNF=10, MODE=10).
+            SlowAlternateOpenDrain = 0b1110,
+            ///< Alternate function output open-drain, max speed 2 MHz (CNF=11, MODE=10).
 
-        MediumGeneralPurposePushPull = 0b0001, ///< General purpose output push-pull, max speed 10 MHz (CNF=00, MODE=01).
-        MediumGeneralPurposeOpenDrain = 0b0101, ///< General purpose output open-drain, max speed 10 MHz (CNF=01, MODE=01).
-        MediumAlternatePushPull = 0b1001, ///< Alternate function output push-pull, max speed 10 MHz (CNF=10, MODE=01).
-        MediumAlternateOpenDrain = 0b1101, ///< Alternate function output open-drain, max speed 10 MHz (CNF=11, MODE=01).
+            MediumGeneralPurposePushPull = 0b0001,
+            ///< General purpose output push-pull, max speed 10 MHz (CNF=00, MODE=01).
+            MediumGeneralPurposeOpenDrain = 0b0101,
+            ///< General purpose output open-drain, max speed 10 MHz (CNF=01, MODE=01).
+            MediumAlternatePushPull = 0b1001,
+            ///< Alternate function output push-pull, max speed 10 MHz (CNF=10, MODE=01).
+            MediumAlternateOpenDrain = 0b1101,
+            ///< Alternate function output open-drain, max speed 10 MHz (CNF=11, MODE=01).
 
-        FastGeneralPurposePushPull = 0b0011, ///< General purpose output push-pull, max speed 50 MHz (CNF=00, MODE=11).
-        FastGeneralPurposeOpenDrain = 0b0111, ///< General purpose output open-drain, max speed 50 MHz (CNF=01, MODE=11).
-        FastAlternatePushPull = 0b1011, ///< Alternate function output push-pull, max speed 50 MHz (CNF=10, MODE=11).
-        FastAlternateOpenDrain = 0b1111, ///< Alternate function output open-drain, max speed 50 MHz (CNF=11, MODE=11).
-    };
+            FastGeneralPurposePushPull = 0b0011,
+            ///< General purpose output push-pull, max speed 50 MHz (CNF=00, MODE=11).
+            FastGeneralPurposeOpenDrain = 0b0111,
+            ///< General purpose output open-drain, max speed 50 MHz (CNF=01, MODE=11).
+            FastAlternatePushPull = 0b1011,
+            ///< Alternate function output push-pull, max speed 50 MHz (CNF=10, MODE=11).
+            FastAlternateOpenDrain = 0b1111,
+            ///< Alternate function output open-drain, max speed 50 MHz (CNF=11, MODE=11).
+        };
+
         /**
          * @brief Configures a pin output state to HIGH (VDD) by writing to the BSRR.
          * @details Avoids read-modify-write race conditions by writing directly to BSRR.
@@ -382,6 +501,7 @@ namespace STM32::MemoryMap {
         volatile register_t CCR;
         volatile register_t TRISE;
     };
+
     struct DMAChannel {
         volatile register_t CCR; //!< DMA channel x configuration register
         volatile register_t CNDTR; //!< DMA channel x number of data register
@@ -395,26 +515,30 @@ namespace STM32::MemoryMap {
             HIGH = 0b10,
             VERY_HIGH = 0b11
         };
+
         enum class DMAMemorySize : unsigned char {
             BYTE = 0b00,
             HALF_WORD = 0b01,
             WORD = 0b10,
         };
+
         enum class TransferDirection : unsigned char {
             FROM_PERIPHERAL_TO_MEMORY = 0b0,
             FROM_MEMORY_TO_PERIPHERAL = 0b1,
         };
+
         bool isEnabled() const {
             return CCR & 0b1;
         }
-        void setPriorityLevel(DMAPriorityLevel level) {
 
+        void setPriorityLevel(DMAPriorityLevel level) {
             constexpr int bit_start = 12;
             // Clear last level
             CCR &= ~(0b11 << bit_start);
             // Set level
             CCR |= (static_cast<register_t>(level) << bit_start);
         }
+
         void setSize(DMAMemorySize memory_size, DMAMemorySize peripheral_size) {
             // set memory size
             constexpr int m_bit_start = 10;
@@ -428,21 +552,25 @@ namespace STM32::MemoryMap {
             // Set level
             CCR |= (static_cast<register_t>(peripheral_size) << p_bit_start);
         }
-        void setPeripheralAddress(const uintptr_t* peripheral) {
+
+        void setPeripheralAddress(const uintptr_t *peripheral) {
             if (isEnabled())
                 return;
             CPAR = reinterpret_cast<register_t>(peripheral);
         }
-        void setMemoryAddress(const uintptr_t* memory) {
+
+        void setMemoryAddress(const uintptr_t *memory) {
             if (isEnabled())
                 return;
             CMAR = reinterpret_cast<register_t>(memory);
         }
-        void setDataTransferMode(const TransferDirection dir ) {
+
+        void setDataTransferMode(const TransferDirection dir) {
             constexpr unsigned int bit_start = 4;
             CCR &= ~(0b1 << bit_start);
             CCR |= (static_cast<register_t>(dir) << bit_start);
         }
+
         void enableTransferCompleteInterrupt(bool enabled) {
             constexpr unsigned int bit_start = 1;
             CCR &= ~(0b1 << bit_start);
@@ -451,16 +579,16 @@ namespace STM32::MemoryMap {
     };
 
     struct DMA1MemoryMap {
-        volatile register_t ISR;//!< DMA interrupt status register
-        volatile register_t IFCR;//!< DMA interrupt flag clear register
+        volatile register_t ISR; //!< DMA interrupt status register
+        volatile register_t IFCR; //!< DMA interrupt flag clear register
 
         // Channel array (DMA1 has 7 channels)
         DMAChannel CH[7];
     };
 
     struct DMA2MemoryMap {
-        volatile register_t ISR;//!< DMA interrupt status register
-        volatile register_t IFCR;//!< DMA interrupt flag clear register
+        volatile register_t ISR; //!< DMA interrupt status register
+        volatile register_t IFCR; //!< DMA interrupt flag clear register
         // Channel array (DMA2 has 5 channels)
         DMAChannel CH[5];
     };

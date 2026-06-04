@@ -33,8 +33,8 @@ namespace STM32 {
                 break;
         }
 
-        MemoryMap::RCC1->enableClock(MemoryMap::APB2Peripheral::GPIOB);
-        MemoryMap::RCC1->enableClock(i2cPeripheral);
+        MemoryMap::RCC1->enablePeripheral(MemoryMap::APB2Peripheral::GPIOB);
+        MemoryMap::RCC1->enablePeripheral(i2cPeripheral);
 
         MemoryMap::GPIOB->setPinMode(scl, MemoryMap::GPIO::Mode::SlowAlternateOpenDrain);
         MemoryMap::GPIOB->setPinMode(sda, MemoryMap::GPIO::Mode::SlowAlternateOpenDrain);
@@ -48,14 +48,15 @@ namespace STM32 {
         // Set frequency
         _i2c_mm->CR2 |= (0b000010 << freq_bit);
         // Set SCL frequency to slow mode
-        constexpr uint32_t scl_bit = 11;
         constexpr uint32_t fs_bit= 15;
         _i2c_mm->CCR &= ~(0b1 << fs_bit); //reset
         _i2c_mm->CCR |= (0b0 << fs_bit); //set standard mode bit
         // We are using standard mode i2c, so the SCL will be at 100kHz or 0.1Mhz which is 10us of scl period.
         // Time period of SCL = CCR * Time period of APB1 clock
+        constexpr uint32_t scl_bit = 11;
         _i2c_mm->CCR &= ~(0b1111'1111'1111 << scl_bit); //reset
-        _i2c_mm->CCR |= (0b000010 << scl_bit); //set
+        //for 100khz, T=10us = CCR * T_PCLK1 => CCR = T/T_PCLK1
+        _i2c_mm->CCR |= (10<< scl_bit); //set
 
         //Sete rise time value
     }

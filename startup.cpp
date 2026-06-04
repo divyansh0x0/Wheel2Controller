@@ -1,3 +1,4 @@
+#include "drivers/MemoryMap.h"
 /**
 * @brief Cortex-M vector table.
  *
@@ -48,27 +49,22 @@ extern "C" init_func_t _einit; ///< End address of the static constructor initia
  * @brief Configure system clock to 72 MHz using the external 8 MHz HSE crystal.
  */
 static void initSystemClock() {
-    volatile auto* const FLASH_ACR = reinterpret_cast<volatile unsigned int*>(0x40022000u);
-    volatile auto* const RCC_CR    = reinterpret_cast<volatile unsigned int*>(0x40021000u);
-    volatile auto* const RCC_CFGR  = reinterpret_cast<volatile unsigned int*>(0x40021004u);
+    // 1. Flash: enable prefetch buffer and set 2 wait states (needed for 72MHz)
+    volatile auto* const FLASH_ACR = reinterpret_cast<volatile STM32::MemoryMap::register_t*>(0x40022000u);
+    *FLASH_ACR = (1 << 4) | (0b010 << 0);
+    STM32::MemoryMap::waitForBit(FLASH_ACR, 5, true);
 
-    // 1. Flash: 2 wait states + prefetch buffer enable
-    *FLASH_ACR = (1u << 4u) | 2u;
+    // 2. Enable HSE (8 MHz external crystal)
+    STM32::MemoryMap::RCC1->enableHSE();
 
-    // 2. Enable HSE
-    *RCC_CR |= (1u << 16u);
-    while (!(*RCC_CR & (1u << 17u))) {}
+    // 3. Configure and enable PLL (HSE x9 = 72 MHz)
+    STM32::MemoryMap::RCC1->enablePLL(STM32::MemoryMap::RCC::PLLSource::HSE, STM32::MemoryMap::RCC::PLLMultiplier::Times9);
 
-    // 3. Configure PLL and bus prescalers (PLLMUL = x9, PLLSRC = HSE, PPRE1 = /2)
-    *RCC_CFGR = (0b0111u << 18u) | (1u << 16u) | (0b100u << 8u);
-
-    // 4. Enable PLL
-    *RCC_CR |= (1u << 24u);
-    while (!(*RCC_CR & (1u << 25u))) {}
+    // 4. Set bus prescalers (APB1 must not exceed 36MHz, so divide by 2)
+    STM32::MemoryMap::RCC1->setAPB1PreScaler(STM32::MemoryMap::RCC::Prescaler::Half);
 
     // 5. Select PLL as system clock source
-    *RCC_CFGR |= 0b10u;
-    while ((*RCC_CFGR & (0b11u << 2u)) != (0b10u << 2u)) {}
+    STM32::MemoryMap::RCC1->setSYSCLKSource(STM32::MemoryMap::RCC::SystemClockSource::PLL);
 }
 
 /**
