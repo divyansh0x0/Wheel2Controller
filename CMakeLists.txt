@@ -61,6 +61,7 @@ add_executable(Wheel2Firmware
         include/drivers/USART.h
         src/drivers/I2C.cpp
         include/drivers/I2C.h
+        include/drivers/ClockManager.h
 )
 
 # -----------------------------------------------------------------------------
