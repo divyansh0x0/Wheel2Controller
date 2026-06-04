@@ -10,7 +10,7 @@
 
 #include <cstdint>
 
-namespace W2 {
+namespace STM32::MemoryMap {
     inline constexpr unsigned int CPU_FREQUENCY = 72'000'000;
 
     /**
@@ -49,39 +49,11 @@ namespace W2 {
     enum class APB1Peripheral : unsigned int {
         TIM2 = 0, ///< TIM2 clock enable.
         TIM3 = 1, ///< TIM3 clock enable.
-        TIM4 = 2 ///< TIM4 clock enable.
+        TIM4 = 2, ///< TIM4 clock enable.
+        I2C1 = 21, ///< I2C1 clock enable
+        I2C2 = 22 ///< I2C2 clock enable
     };
 
-    /**
-     * @brief Defines the 4-bit configuration for the GPIO MODE and CNF register bitfields.
-     * @details Mapped to the CNF[1:0] and MODE[1:0] bitfields in the GPIOx_CRL and GPIOx_CRH registers.
-     */
-    enum class GPIOMode: unsigned int {
-        /* Input Modes */
-        AnalogInput = 0b0000, ///< Analog input configuration (CNF=00, MODE=00).
-        FloatingInput = 0b0100, ///< Floating input configuration (CNF=01, MODE=00).
-        PullUpPullDown = 0b1000, ///< Input with pull-up / pull-down configuration (CNF=10, MODE=00).
-
-        /* Output Modes */
-        SlowGeneralPurposePushPull = 0b0010, ///< General purpose output push-pull, max speed 2 MHz (CNF=00, MODE=10).
-        SlowGeneralPurposeOpenDrain = 0b0110, ///< General purpose output open-drain, max speed 2 MHz (CNF=01, MODE=10).
-        SlowAlternatePushPull = 0b1010, ///< Alternate function output push-pull, max speed 2 MHz (CNF=10, MODE=10).
-        SlowAlternateOpenDrain = 0b1110, ///< Alternate function output open-drain, max speed 2 MHz (CNF=11, MODE=10).
-
-        MediumGeneralPurposePushPull = 0b0001,
-        ///< General purpose output push-pull, max speed 10 MHz (CNF=00, MODE=01).
-        MediumGeneralPurposeOpenDrain = 0b0101,
-        ///< General purpose output open-drain, max speed 10 MHz (CNF=01, MODE=01).
-        MediumAlternatePushPull = 0b1001, ///< Alternate function output push-pull, max speed 10 MHz (CNF=10, MODE=01).
-        MediumAlternateOpenDrain = 0b1101,
-        ///< Alternate function output open-drain, max speed 10 MHz (CNF=11, MODE=01).
-
-        FastGeneralPurposePushPull = 0b0011, ///< General purpose output push-pull, max speed 50 MHz (CNF=00, MODE=11).
-        FastGeneralPurposeOpenDrain = 0b0111,
-        ///< General purpose output open-drain, max speed 50 MHz (CNF=01, MODE=11).
-        FastAlternatePushPull = 0b1011, ///< Alternate function output push-pull, max speed 50 MHz (CNF=10, MODE=11).
-        FastAlternateOpenDrain = 0b1111, ///< Alternate function output open-drain, max speed 50 MHz (CNF=11, MODE=11).
-    };
 
     /**
      * @brief Identifies the 4 independent hardware channels inside a General Purpose Timer.
@@ -251,7 +223,32 @@ namespace W2 {
         volatile register_t BSRR; ///< 0x10 Port Bit Set/Reset Register (GPIOx_BSRR).
         volatile register_t BRR; ///< 0x14 Port Bit Reset Register (GPIOx_BRR).
         volatile register_t LCKR; ///< 0x18 Port Configuration Lock Register (GPIOx_LCKR).
+    /**
+     * @brief Defines the 4-bit configuration for the GPIO MODE and CNF register bitfields.
+     * @details Mapped to the CNF[1:0] and MODE[1:0] bitfields in the GPIOx_CRL and GPIOx_CRH registers.
+     */
+    enum class Mode: unsigned int {
+        /* Input Modes */
+        AnalogInput = 0b0000, ///< Analog input configuration (CNF=00, MODE=00).
+        FloatingInput = 0b0100, ///< Floating input configuration (CNF=01, MODE=00).
+        PullUpPullDown = 0b1000, ///< Input with pull-up / pull-down configuration (CNF=10, MODE=00).
 
+        /* Output Modes */
+        SlowGeneralPurposePushPull = 0b0010, ///< General purpose output push-pull, max speed 2 MHz (CNF=00, MODE=10).
+        SlowGeneralPurposeOpenDrain = 0b0110, ///< General purpose output open-drain, max speed 2 MHz (CNF=01, MODE=10).
+        SlowAlternatePushPull = 0b1010, ///< Alternate function output push-pull, max speed 2 MHz (CNF=10, MODE=10).
+        SlowAlternateOpenDrain = 0b1110, ///< Alternate function output open-drain, max speed 2 MHz (CNF=11, MODE=10).
+
+        MediumGeneralPurposePushPull = 0b0001, ///< General purpose output push-pull, max speed 10 MHz (CNF=00, MODE=01).
+        MediumGeneralPurposeOpenDrain = 0b0101, ///< General purpose output open-drain, max speed 10 MHz (CNF=01, MODE=01).
+        MediumAlternatePushPull = 0b1001, ///< Alternate function output push-pull, max speed 10 MHz (CNF=10, MODE=01).
+        MediumAlternateOpenDrain = 0b1101, ///< Alternate function output open-drain, max speed 10 MHz (CNF=11, MODE=01).
+
+        FastGeneralPurposePushPull = 0b0011, ///< General purpose output push-pull, max speed 50 MHz (CNF=00, MODE=11).
+        FastGeneralPurposeOpenDrain = 0b0111, ///< General purpose output open-drain, max speed 50 MHz (CNF=01, MODE=11).
+        FastAlternatePushPull = 0b1011, ///< Alternate function output push-pull, max speed 50 MHz (CNF=10, MODE=11).
+        FastAlternateOpenDrain = 0b1111, ///< Alternate function output open-drain, max speed 50 MHz (CNF=11, MODE=11).
+    };
         /**
          * @brief Configures a pin output state to HIGH (VDD) by writing to the BSRR.
          * @details Avoids read-modify-write race conditions by writing directly to BSRR.
@@ -276,9 +273,9 @@ namespace W2 {
          * to configure the pull-up/pull-down state if PullUpPullDown mode is selected.
          * @param pin The target pin number (0 to 15).
          * @param mode The pin configuration mode (analog, floating, pull-up/down, or output modes).
-         * @param pull Selects pull-up (Up) or pull-down (Down) resistor configuration.
+         * @param pull Selects pull-up (Up) or pull-down (Down) resistor configuration. Only applies if mode is GPIOMode::PullUpPulLDown
          */
-        void setPinMode(unsigned int pin, GPIOMode mode, GPIOPullState pull = GPIOPullState::Up) {
+        void setPinMode(unsigned int pin, Mode mode, GPIOPullState pull = GPIOPullState::Up) {
             // 1. Calculate bit-shift configuration offsets based on pin number
             const unsigned int shift = (pin % 8) * 4;
             const auto mode_bits = static_cast<unsigned int>(mode);
@@ -293,7 +290,7 @@ namespace W2 {
             }
 
             // 3. Configure the pull-up/pull-down resistor state via the ODR register
-            if (mode == GPIOMode::PullUpPullDown) {
+            if (mode == Mode::PullUpPullDown) {
                 if (pull == GPIOPullState::Up) {
                     this->setOutputBit(pin); // Enable pull-up configuration
                 } else {
@@ -374,6 +371,17 @@ namespace W2 {
         }
     };
 
+    struct I2C {
+        volatile register_t CR1;
+        volatile register_t CR2;
+        volatile register_t OAR1;
+        volatile register_t OAR2;
+        volatile register_t DR;
+        volatile register_t SR1;
+        volatile register_t SR2;
+        volatile register_t CCR;
+        volatile register_t TRISE;
+    };
     struct DMAChannel {
         volatile register_t CCR; //!< DMA channel x configuration register
         volatile register_t CNDTR; //!< DMA channel x number of data register
@@ -420,7 +428,7 @@ namespace W2 {
             // Set level
             CCR |= (static_cast<register_t>(peripheral_size) << p_bit_start);
         }
-        void setPeripheralAddress(const register_t* peripheral) {
+        void setPeripheralAddress(const uintptr_t* peripheral) {
             if (isEnabled())
                 return;
             CPAR = reinterpret_cast<register_t>(peripheral);

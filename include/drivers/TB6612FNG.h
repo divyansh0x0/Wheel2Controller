@@ -3,7 +3,7 @@
 
 #include "MemoryMap.h"
 
-namespace W2 {
+namespace STM32 {
     enum class MotorDirection {
         STOP = 0,
         FORWARD = 1,

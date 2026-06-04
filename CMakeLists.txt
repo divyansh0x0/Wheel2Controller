@@ -59,6 +59,10 @@ add_executable(Wheel2Firmware
         startup.cpp
         src/main.cpp
         include/drivers/USART.h
+        src/drivers/I2C.cpp
+        include/drivers/I2C.h
+        include/drivers/APB1.cpp
+        include/drivers/APB1.h
 )
 
 # -----------------------------------------------------------------------------
